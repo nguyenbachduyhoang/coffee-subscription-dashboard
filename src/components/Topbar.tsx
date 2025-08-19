@@ -3,9 +3,12 @@ import { Menu, Bell, User } from 'lucide-react';
 
 interface TopbarProps {
   toggleSidebar: () => void;
+  user: { username: string; role: string } | null;
 }
 
-const Topbar: React.FC<TopbarProps> = ({ toggleSidebar }) => {
+
+const Topbar: React.FC<TopbarProps> = ({ toggleSidebar, user }) => {
+
   return (
     <header className="h-16 bg-[#6F4E37] border-b border-[#5A3E2D] flex items-center justify-between px-6 shadow-sm">
       <div className="flex items-center">
@@ -24,11 +27,18 @@ const Topbar: React.FC<TopbarProps> = ({ toggleSidebar }) => {
           <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
         </button>
         
-        <div className="flex items-center space-x-2 text-white">
-          <div className="w-8 h-8 bg-[#FFD580] rounded-full flex items-center justify-center">
-            <User className="w-5 h-5 text-[#6F4E37]" />
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 text-white">
+            <div className="w-8 h-8 bg-[#FFD580] rounded-full flex items-center justify-center">
+              <User className="w-5 h-5 text-[#6F4E37]" />
+            </div>
+            <div className="hidden md:block">
+              <span className="font-medium">{user?.username || 'Admin'}</span>
+              <p className="text-xs text-[#DCC1A1]">{user?.role || 'Administrator'}</p>
+            </div>
           </div>
-          <span className="hidden md:block font-medium">Admin</span>
+          
+          {/* Logout button moved to Sidebar */}
         </div>
       </div>
     </header>

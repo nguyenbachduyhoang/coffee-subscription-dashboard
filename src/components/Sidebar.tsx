@@ -7,12 +7,16 @@ import {
   Package, 
   ShoppingCart, 
   BarChart, 
+  Coffee,
   LogOut,
-  Coffee
+  User
 } from 'lucide-react';
+
 
 interface SidebarProps {
   isCollapsed: boolean;
+  onLogout: () => void;
+  user: { username: string; role: string } | null;
 }
 
 const menuItems = [
@@ -21,17 +25,11 @@ const menuItems = [
   { icon: Package, label: 'Quản lý gói dịch vụ', path: '/packages' },
   { icon: ShoppingCart, label: 'Đơn hàng', path: '/orders' },
   { icon: BarChart, label: 'Thống kê', path: '/statistics' },
+  { icon: Package, label: 'Sản phẩm', path: '/products' },
 ];
 
-const Sidebar: React.FC<SidebarProps> = ({ isCollapsed }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onLogout, user }) => {
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
-      localStorage.clear();
-      navigate('/');
-    }
-  };
 
   return (
     <motion.div 
@@ -85,37 +83,25 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed }) => {
           ))}
         </nav>
 
-        {/* Logout */}
-        <div className="border-t border-[#5A3E2D] p-4">
+        {/* Footer with Logout */}
+        <div className="border-t border-[#5A3E2D] mt-auto pb-2">
           <button
-            onClick={handleLogout}
-            className="flex items-center w-full px-2 py-3 rounded-lg transition-all duration-200 hover:bg-[#5A3E2D] hover:text-[#DCC1A1] text-white group"
+            onClick={() => {
+              if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+                onLogout();
+              }
+            }}
+            className="w-full flex items-center gap-2 px-6 py-3 text-white font-semibold text-base rounded-lg transition-all duration-200 hover:bg-[#5A3E2D] focus:outline-none"
+            style={{ background: 'transparent', justifyContent: 'flex-start' }}
+            title="Đăng xuất"
           >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            {!isCollapsed && (
-              <motion.span 
-                className="ml-3 font-medium"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.1 }}
-              >
-                Đăng xuất
-              </motion.span>
-            )}
+            <LogOut className="w-5 h-5" />
+            Đăng xuất
           </button>
-        </div>
-
-        {/* Footer */}
-        {!isCollapsed && (
-          <motion.div 
-            className="p-4 text-center text-sm text-white/60"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
+          <div className="text-center text-sm text-white/60 mt-2">
             © 2025 CafeDaily
-          </motion.div>
-        )}
+          </div>
+        </div>
       </div>
     </motion.div>
   );
