@@ -1,24 +1,81 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Edit, Trash2, X } from 'lucide-react';
-import { getDemoData, updatePackage, deletePackage, addPackage } from '../utils/demoData';
+import { planApi, Plan, CreatePlanRequest, UpdatePlanRequest } from '../utils/apiPlan';
 
 interface Package {
   id: string;
   name: string;
   price: number;
   duration: number;
+  durationDays: number;
   description: string;
-  features: string[];
-  isPopular: boolean;
+  productName: string;
+  imageUrl: string;
+  dailyQuota: number;
+  maxPerVisit: number;
+  active: boolean;
 }
 
 const Packages: React.FC = () => {
-  const { packages: initialPackages } = getDemoData();
-  const [packages, setPackages] = useState<Package[]>(initialPackages);
+  const [packages, setPackages] = useState<Package[]>([]);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'edit' | 'add'>('add');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Convert Plan to Package
+  const convertPlanToPackage = (plan: Plan): Package => {
+    return {
+      id: plan.planId.toString(),
+      name: plan.name,
+      price: plan.price,
+      duration: Math.ceil(plan.durationDays / 30), // Convert days to months
+      durationDays: plan.durationDays,
+      description: plan.description,
+      productName: plan.productName,
+      imageUrl: plan.imageUrl,
+      dailyQuota: plan.dailyQuota,
+      maxPerVisit: plan.maxPerVisit,
+      active: plan.active
+    };
+  };
+
+  // Convert Package to CreatePlanRequest
+  const convertPackageToCreateRequest = (pkg: Partial<Package>): CreatePlanRequest => {
+    return {
+      name: pkg.name || '',
+      description: pkg.description || '',
+      productName: pkg.productName || pkg.name || '',
+      imageUrl: pkg.imageUrl || '',
+      price: pkg.price || 0,
+      durationDays: (pkg.duration || 1) * 30, // Convert months to days
+      dailyQuota: pkg.dailyQuota || 1,
+      maxPerVisit: pkg.maxPerVisit || 1,
+      active: pkg.active !== undefined ? pkg.active : true
+    };
+  };
+
+  // Load packages from API
+  const loadPackages = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const plans = await planApi.getAllPlans();
+      const convertedPackages = plans.map(convertPlanToPackage);
+      setPackages(convertedPackages);
+    } catch (err) {
+      setError('Không thể tải dữ liệu gói dịch vụ');
+      console.error('Error loading packages:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPackages();
+  }, [loadPackages]);
 
   const openModal = (pkg: Package | null, mode: 'edit' | 'add') => {
     setSelectedPackage(pkg);
@@ -31,21 +88,45 @@ const Packages: React.FC = () => {
     setSelectedPackage(null);
   };
 
-  const handleSave = (packageData: Partial<Package>) => {
-    if (modalMode === 'add') {
-      const newPackage = addPackage(packageData as Omit<Package, 'id'>);
-      setPackages([...packages, newPackage]);
-    } else if (modalMode === 'edit' && selectedPackage) {
-      const updatedPackage = updatePackage(selectedPackage.id, packageData);
-      setPackages(packages.map(p => p.id === selectedPackage.id ? updatedPackage : p));
+  const handleSave = async (packageData: Partial<Package>) => {
+    try {
+      if (modalMode === 'add') {
+        const createRequest = convertPackageToCreateRequest(packageData);
+        const newPlan = await planApi.createPlan(createRequest);
+        const newPackage = convertPlanToPackage(newPlan);
+        setPackages([...packages, newPackage]);
+      } else if (modalMode === 'edit' && selectedPackage) {
+        const updateRequest: UpdatePlanRequest = {
+          name: packageData.name,
+          description: packageData.description,
+          productName: packageData.productName || packageData.name,
+          imageUrl: packageData.imageUrl,
+          price: packageData.price,
+          durationDays: packageData.duration ? packageData.duration * 30 : undefined,
+          dailyQuota: packageData.dailyQuota,
+          maxPerVisit: packageData.maxPerVisit,
+          active: packageData.active
+        };
+        const updatedPlan = await planApi.updatePlan(parseInt(selectedPackage.id), updateRequest);
+        const updatedPackage = convertPlanToPackage(updatedPlan);
+        setPackages(packages.map(p => p.id === selectedPackage.id ? updatedPackage : p));
+      }
+      closeModal();
+    } catch (err) {
+      console.error('Error saving package:', err);
+      alert('Có lỗi xảy ra khi lưu gói dịch vụ');
     }
-    closeModal();
   };
 
-  const handleDelete = (packageId: string) => {
+  const handleDelete = async (packageId: string) => {
     if (confirm('Bạn có chắc chắn muốn xóa gói dịch vụ này?')) {
-      deletePackage(packageId);
-      setPackages(packages.filter(p => p.id !== packageId));
+      try {
+        await planApi.deletePlan(parseInt(packageId));
+        setPackages(packages.filter(p => p.id !== packageId));
+      } catch (err) {
+        console.error('Error deleting package:', err);
+        alert('Có lỗi xảy ra khi xóa gói dịch vụ');
+      }
     }
   };
 
@@ -61,67 +142,117 @@ const Packages: React.FC = () => {
           <button
             onClick={() => openModal(null, 'add')}
             className="bg-[#6F4E37] text-white px-4 py-2 rounded-lg hover:bg-[#5A3E2D] transition-colors duration-200 flex items-center"
+            disabled={loading}
           >
             <Plus className="w-4 h-4 mr-2" />
             Thêm gói mới
           </button>
         </div>
 
-        {/* Packages Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {packages.map((pkg, index) => (
-            <motion.div
-              key={pkg.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              className={`bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-200 ${
-                pkg.isPopular ? 'ring-2 ring-[#FFD580]' : ''
-              }`}
-            >
-              {pkg.isPopular && (
-                <div className="bg-[#FFD580] text-[#6F4E37] text-center py-2 font-semibold text-sm">
-                  GÓI PHỔ BIẾN
-                </div>
-              )}
-              
-              <div className="p-6">
-                <h3 className="text-xl font-bold text-[#6F4E37] mb-2">{pkg.name}</h3>
-                <div className="text-3xl font-bold text-[#6F4E37] mb-4">
-                  {pkg.price.toLocaleString('vi-VN')}₫
-                  <span className="text-sm font-normal text-gray-600">/{pkg.duration} tháng</span>
-                </div>
-                
-                <p className="text-gray-600 mb-4">{pkg.description}</p>
-                
-                <ul className="space-y-2 mb-6">
-                  {pkg.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-center text-sm text-gray-700">
-                      <div className="w-2 h-2 bg-[#6F4E37] rounded-full mr-3"></div>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#6F4E37]"></div>
+            <span className="ml-2 text-[#6F4E37]">Đang tải...</span>
+          </div>
+        )}
 
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => openModal(pkg, 'edit')}
-                    className="flex-1 bg-[#6F4E37] text-white py-2 px-4 rounded-lg hover:bg-[#5A3E2D] transition-colors duration-200 flex items-center justify-center"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Sửa
-                  </button>
-                  <button
-                    onClick={() => handleDelete(pkg.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+        {/* Error State */}
+        {error && !loading && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+            <p className="text-red-600">{error}</p>
+            <button
+              onClick={loadPackages}
+              className="mt-2 text-red-600 hover:text-red-800 underline"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
+
+        {/* Packages Grid */}
+        {!loading && !error && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {packages.map((pkg, index) => (
+              <motion.div
+                key={pkg.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className={`bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-200 ${
+                  pkg.active ? 'ring-2 ring-[#FFD580]' : ''
+                }`}
+              >
+                {pkg.active && (
+                  <div className="bg-[#FFD580] text-[#6F4E37] text-center py-2 font-semibold text-sm">
+                    GÓI ĐANG HOẠT ĐỘNG
+                  </div>
+                )}
+                
+                <div className="p-6">
+                  {/* Image */}
+                  {pkg.imageUrl && (
+                    <div className="mb-4">
+                      <img
+                        src={pkg.imageUrl}
+                        alt={pkg.name}
+                        className="w-full h-32 object-cover rounded-lg"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                  
+                  <h3 className="text-xl font-bold text-[#6F4E37] mb-2">{pkg.name}</h3>
+                  <div className="text-3xl font-bold text-[#6F4E37] mb-2">
+                    {pkg.price.toLocaleString('vi-VN')}₫
+                    <span className="text-sm font-normal text-gray-600">/{pkg.duration === 1 ? `${pkg.durationDays} ngày` : `${pkg.duration} tháng`}</span>
+                  </div>
+                  
+                  <div className="text-sm text-gray-600 mb-2">
+                    <strong>Sản phẩm:</strong> {pkg.productName}
+                  </div>
+                  
+                  <div className="text-sm text-gray-600 mb-2">
+                    <strong>Hạn mức:</strong> {pkg.dailyQuota} ly/ngày, tối đa {pkg.maxPerVisit} ly/lần
+                  </div>
+                  
+                  <p className="text-gray-600 mb-4">{pkg.description}</p>
+
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => openModal(pkg, 'edit')}
+                      className="flex-1 bg-[#6F4E37] text-white py-2 px-4 rounded-lg hover:bg-[#5A3E2D] transition-colors duration-200 flex items-center justify-center"
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Sửa
+                    </button>
+                    <button
+                      onClick={() => handleDelete(pkg.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!loading && !error && packages.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500 mb-4">Chưa có gói dịch vụ nào</p>
+            <button
+              onClick={() => openModal(null, 'add')}
+              className="bg-[#6F4E37] text-white px-4 py-2 rounded-lg hover:bg-[#5A3E2D] transition-colors duration-200"
+            >
+              Thêm gói đầu tiên
+            </button>
+          </div>
+        )}
       </motion.div>
 
       {/* Modal */}
@@ -150,16 +281,16 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
     price: pkg?.price || 0,
     duration: pkg?.duration || 1,
     description: pkg?.description || '',
-    features: pkg?.features.join('\n') || '',
-    isPopular: pkg?.isPopular || false
+    productName: pkg?.productName || '',
+    imageUrl: pkg?.imageUrl || '',
+    dailyQuota: pkg?.dailyQuota || 1,
+    maxPerVisit: pkg?.maxPerVisit || 1,
+    active: pkg?.active !== undefined ? pkg?.active : true
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({
-      ...formData,
-      features: formData.features.split('\n').filter(f => f.trim())
-    });
+    onSave(formData);
   };
 
   return (
@@ -196,6 +327,17 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Tên sản phẩm</label>
+            <input
+              type="text"
+              value={formData.productName}
+              onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+              required
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Giá (VNĐ)</label>
@@ -220,6 +362,30 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Hạn mức hàng ngày</label>
+              <input
+                type="number"
+                value={formData.dailyQuota}
+                onChange={(e) => setFormData({ ...formData, dailyQuota: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tối đa mỗi lần</label>
+              <input
+                type="number"
+                value={formData.maxPerVisit}
+                onChange={(e) => setFormData({ ...formData, maxPerVisit: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+                required
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả</label>
             <textarea
@@ -232,26 +398,25 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tính năng (mỗi dòng một tính năng)</label>
-            <textarea
-              value={formData.features}
-              onChange={(e) => setFormData({ ...formData, features: e.target.value })}
+            <label className="block text-sm font-medium text-gray-700 mb-2">URL hình ảnh</label>
+            <input
+              type="url"
+              value={formData.imageUrl}
+              onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
-              rows={4}
-              placeholder="Giao hàng miễn phí&#10;Tư vấn 24/7&#10;Cà phê chất lượng cao"
-              required
+              placeholder="https://example.com/image.jpg"
             />
           </div>
 
           <div className="flex items-center">
             <input
               type="checkbox"
-              id="isPopular"
-              checked={formData.isPopular}
-              onChange={(e) => setFormData({ ...formData, isPopular: e.target.checked })}
+              id="active"
+              checked={formData.active}
+              onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
               className="w-4 h-4 text-[#6F4E37] border-gray-300 rounded focus:ring-[#FFD580]"
             />
-            <label htmlFor="isPopular" className="ml-2 text-sm text-gray-700">Gói phổ biến</label>
+            <label htmlFor="active" className="ml-2 text-sm text-gray-700">Kích hoạt</label>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4">

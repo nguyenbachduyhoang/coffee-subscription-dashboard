@@ -116,20 +116,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
               )}
             </motion.button>
           </form>
-
-          {/* Demo Credentials */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="mt-6 p-4 bg-[#F5E9DD] rounded-lg"
-          >
-            <p className="text-sm text-[#6F4E37] font-medium mb-2">Thông tin đăng nhập demo:</p>
-            <div className="text-xs text-gray-600 space-y-1">
-              <p><strong>Tên đăng nhập:</strong> admin</p>
-              <p><strong>Mật khẩu:</strong> admin123</p>
-            </div>
-          </motion.div>
         </div>
       </motion.div>
     </div>
