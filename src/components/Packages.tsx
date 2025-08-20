@@ -11,6 +11,7 @@ interface Package {
   durationDays: number;
   description: string;
   productName: string;
+  productId: number;
   imageUrl: string;
   dailyQuota: number;
   maxPerVisit: number;
@@ -35,6 +36,7 @@ const Packages: React.FC = () => {
       durationDays: plan.durationDays,
       description: plan.description,
       productName: plan.productName,
+      productId: 0, // Default value, this should be updated according to your API response
       imageUrl: plan.imageUrl,
       dailyQuota: plan.dailyQuota,
       maxPerVisit: plan.maxPerVisit,
@@ -47,10 +49,9 @@ const Packages: React.FC = () => {
     return {
       name: pkg.name || '',
       description: pkg.description || '',
-      productName: pkg.productName || pkg.name || '',
-      imageUrl: pkg.imageUrl || '',
+      productId: parseInt(pkg.productId?.toString() || '0'),
       price: pkg.price || 0,
-      durationDays: (pkg.duration || 1) * 30, // Convert months to days
+      durationDays: pkg.durationDays || 1, // Use durationDays directly, not duration * 30
       dailyQuota: pkg.dailyQuota || 1,
       maxPerVisit: pkg.maxPerVisit || 1,
       active: pkg.active !== undefined ? pkg.active : true
@@ -99,10 +100,10 @@ const Packages: React.FC = () => {
         const updateRequest: UpdatePlanRequest = {
           name: packageData.name,
           description: packageData.description,
-          productName: packageData.productName || packageData.name,
+          productId: packageData.productId,
           imageUrl: packageData.imageUrl,
           price: packageData.price,
-          durationDays: packageData.duration ? packageData.duration * 30 : undefined,
+          durationDays: packageData.durationDays,
           dailyQuota: packageData.dailyQuota,
           maxPerVisit: packageData.maxPerVisit,
           active: packageData.active
@@ -279,14 +280,31 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
   const [formData, setFormData] = useState({
     name: pkg?.name || '',
     price: pkg?.price || 0,
-    duration: pkg?.duration || 1,
+    durationDays: pkg?.durationDays || 1,
     description: pkg?.description || '',
     productName: pkg?.productName || '',
+    productId: pkg?.productId || 0,
     imageUrl: pkg?.imageUrl || '',
     dailyQuota: pkg?.dailyQuota || 1,
     maxPerVisit: pkg?.maxPerVisit || 1,
     active: pkg?.active !== undefined ? pkg?.active : true
   });
+
+  const [priceDisplay, setPriceDisplay] = useState(
+    formData.price ? formData.price.toLocaleString('vi-VN') : ''
+  );
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Remove all non-digit characters
+    const numericValue = value.replace(/[^\d]/g, '');
+    const numberValue = parseInt(numericValue) || 0;
+    
+    // Update the actual price value
+    setFormData({ ...formData, price: numberValue });
+    // Update the display value with formatting
+    setPriceDisplay(numberValue ? numberValue.toLocaleString('vi-VN') : '');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -328,11 +346,11 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tên sản phẩm</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">ID sản phẩm</label>
             <input
-              type="text"
-              value={formData.productName}
-              onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+              type="number"
+              value={formData.productId}
+              onChange={(e) => setFormData({ ...formData, productId: Number(e.target.value) })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
               required
             />
@@ -342,20 +360,21 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Giá (VNĐ)</label>
               <input
-                type="number"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                type="text"
+                value={priceDisplay}
+                onChange={handlePriceChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+                placeholder="0"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Thời hạn (tháng)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Thời hạn (ngày)</label>
               <input
                 type="number"
-                value={formData.duration}
-                onChange={(e) => setFormData({ ...formData, duration: Number(e.target.value) })}
+                value={formData.durationDays}
+                onChange={(e) => setFormData({ ...formData, durationDays: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
                 required
               />
@@ -397,16 +416,18 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">URL hình ảnh</label>
-            <input
-              type="url"
-              value={formData.imageUrl}
-              onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
-              placeholder="https://example.com/image.jpg"
-            />
-          </div>
+          {mode === 'edit' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">URL hình ảnh</label>
+              <input
+                type="url"
+                value={formData.imageUrl}
+                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+                placeholder="https://example.com/image.jpg"
+              />
+            </div>
+          )}
 
           <div className="flex items-center">
             <input

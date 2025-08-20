@@ -14,8 +14,7 @@ export interface Plan {
 export interface CreatePlanRequest {
   name: string;
   description: string;
-  productName: string;
-  imageUrl: string;
+  productId: number;
   price: number;
   durationDays: number;
   dailyQuota: number;
@@ -26,7 +25,7 @@ export interface CreatePlanRequest {
 export interface UpdatePlanRequest {
   name?: string;
   description?: string;
-  productName?: string;
+  productId?: number;
   imageUrl?: string;
   price?: number;
   durationDays?: number;
