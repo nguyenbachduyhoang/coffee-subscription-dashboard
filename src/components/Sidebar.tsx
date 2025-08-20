@@ -22,10 +22,10 @@ interface SidebarProps {
 const menuItems = [
   { icon: Home, label: 'Tổng quan', path: '/' },
   { icon: Users, label: 'Quản lý người dùng', path: '/users' },
+  { icon: Package, label: 'Quản lý sản phẩm', path: '/products' },
   { icon: Package, label: 'Quản lý gói dịch vụ', path: '/packages' },
   { icon: ShoppingCart, label: 'Đơn hàng', path: '/orders' },
   { icon: BarChart, label: 'Thống kê', path: '/statistics' },
-  { icon: Package, label: 'Sản phẩm', path: '/products' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onLogout, user }) => {

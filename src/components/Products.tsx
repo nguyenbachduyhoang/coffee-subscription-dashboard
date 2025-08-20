@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { MdEdit, MdDelete, MdVisibility } from 'react-icons/md';
+import * as api from '../utils/apiClient';
 
 interface Product {
   product_id: string | number;
@@ -13,8 +14,6 @@ interface Product {
   image_id?: string;
 }
 
-
-const API_BASE = 'http://minhkhoi02-001-site1.anytempurl.com/api/Product';
 
 const defaultForm: Product = {
   product_id: '',
@@ -49,13 +48,8 @@ const Products: React.FC = () => {
 
   const fetchProducts = () => {
     setLoading(true);
-    Promise.all([
-      fetch(`${API_BASE}/get-coffee-product`).then(res => res.json()),
-      fetch(`${API_BASE}/get-tea-product`).then(res => res.json()),
-      fetch(`${API_BASE}/get-freeze-product`).then(res => res.json()),
-    ])
-      .then(([coffee, tea, freeze]) => {
-        const all = [...coffee, ...tea, ...freeze];
+    api.getAllProducts()
+      .then((all: any[]) => {
         const mapped = all.map((p: any, idx: number) => {
           // category_id: prefer number or string, never name
           let category_id = p.category_id || p.categoryID || p.category || '';
@@ -133,8 +127,6 @@ const Products: React.FC = () => {
     e.preventDefault();
     setActionLoading(true);
     try {
-      const method = isEdit ? 'PUT' : 'POST';
-      const url = isEdit ? `${API_BASE}/update-product` : `${API_BASE}/add-product`;
       const formData = new FormData();
       if (isEdit) {
         formData.append('productId', String(form.product_id));
@@ -148,20 +140,13 @@ const Products: React.FC = () => {
       } else if (!isEdit) {
         formData.append('image', '');
       }
-      const res = await fetch(url, {
-        method,
-        body: formData,
-      });
-      if (!res.ok) {
-        let msg = 'Lỗi thao tác';
-        try {
-          const err = await res.json();
-          if (err && err.message) msg = err.message;
-        } catch {
-          // ignore JSON parse error
-        }
-        throw new Error(msg);
+
+      if (isEdit) {
+        await api.updateProduct(formData);
+      } else {
+        await api.addProduct(formData);
       }
+
       setShowForm(false);
       toast.success(isEdit ? 'Cập nhật sản phẩm thành công!' : 'Thêm sản phẩm thành công!', {
         position: 'top-center',
@@ -184,8 +169,7 @@ const Products: React.FC = () => {
     if (!deleteId) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/delete-product/${deleteId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Lỗi xóa');
+      await api.deleteProduct(deleteId);
       setDeleteId(null);
       fetchProducts();
     } catch {
