@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as api from '../utils/apiClient';
 
 interface User {
   username: string;
@@ -62,36 +63,25 @@ export const useAuth = () => {
   const login = async (credentials: { username: string; password: string }) => {
     setLoginError("");
     try {
-      const response = await fetch(
-        "http://minhkhoi02-001-site1.anytempurl.com/api/Staff/login",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: credentials.username, password: credentials.password }),
-        }
-      );
-      const token = await response.text();
-      if (response.ok && token && token.length > 100) { // JWT thường dài >100 ký tự
+      // Use centralized api client
+      const token = await api.login(credentials.username, credentials.password);
+      if (token && token.length > 0) {
         const user: User = {
           username: credentials.username,
-          role: "admin", // hoặc giải mã token để lấy role
+          role: 'admin',
         };
         const authData = {
           user,
           token,
-          expiresAt: new Date().getTime() + 24 * 60 * 60 * 1000, // 24h
+          expiresAt: new Date().getTime() + 24 * 60 * 60 * 1000,
         };
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authData));
-        setAuthState({
-          isAuthenticated: true,
-          user,
-          loading: false,
-        });
+        setAuthState({ isAuthenticated: true, user, loading: false });
       } else {
-        setLoginError("Tên đăng nhập hoặc mật khẩu không đúng hoặc lỗi hệ thống.");
+        setLoginError('Tên đăng nhập hoặc mật khẩu không đúng hoặc lỗi hệ thống.');
       }
-    } catch {
-      setLoginError("Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+    } catch (err: unknown) {
+      setLoginError((err as Error)?.message || 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
     }
   };
 

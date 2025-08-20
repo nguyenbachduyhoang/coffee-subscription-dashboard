@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { toast } from 'react-toastify';
 import { MdEdit, MdDelete, MdVisibility } from 'react-icons/md';
+import * as api from '../utils/apiClient';
 
 interface Product {
   product_id: string | number;
@@ -13,8 +13,6 @@ interface Product {
   image_id?: string;
 }
 
-
-const API_BASE = 'http://minhkhoi02-001-site1.anytempurl.com/api/Product';
 
 const defaultForm: Product = {
   product_id: '',
@@ -37,52 +35,106 @@ const Products: React.FC = () => {
   const [isEdit, setIsEdit] = useState(false);
   const [deleteId, setDeleteId] = useState<string | number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [viewDesc, setViewDesc] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [filter, setFilter] = useState('');
+  const [categories, setCategories] = useState<Array<{ category_id: number | string; name: string }>>([]);
   const pageSize = 10;
-  // Filtered products by name (case-insensitive)
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(filter.toLowerCase())
-  );
+
+  // Resolve whatever comes from API/user into a numeric/string id
+  const resolveCategoryId = (val: unknown): string => {
+    if (typeof val === 'number') return String(val);
+    const s = String(val ?? '');
+    if (/^\d+$/.test(s)) return s;
+    const normalize = (t: string) => t
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const target = normalize(s);
+    const found = categories.find(c => normalize(c.name) === target);
+    return found ? String(found.category_id) : '';
+  };
+
+  const getCategoryNameByIdOrValue = (val: unknown): string => {
+    const id = resolveCategoryId(val);
+    const byId = categories.find(c => String(c.category_id) === String(id))?.name;
+    if (byId) return byId;
+    // Fallback: if backend already returned a name
+    if (typeof val === 'string' && val.trim().length > 0) return val;
+    return 'Danh mục';
+  };
+  // Filtered products by name (case-insensitive) and category
+  const filteredProducts = products.filter(p => {
+    const matchesName = p.name.toLowerCase().includes(filter.toLowerCase());
+    // Resolve product's category into an ID-like string for reliable comparison
+    const resolvedProductCatId = resolveCategoryId(p.category_id) || String(p.category_id);
+    const matchesCategory = !categoryFilter || String(resolvedProductCatId) === String(categoryFilter);
+    return matchesName && matchesCategory;
+  });
   const totalPages = Math.ceil(filteredProducts.length / pageSize);
   const pagedProducts = filteredProducts.slice((page - 1) * pageSize, page * pageSize);
 
+  const formatCurrency = (value: number) => {
+    try {
+      return value.toLocaleString('vi-VN') + ' đ';
+    } catch {
+      return `${value} đ`;
+    }
+  };
+
   const fetchProducts = () => {
     setLoading(true);
-    Promise.all([
-      fetch(`${API_BASE}/get-coffee-product`).then(res => res.json()),
-      fetch(`${API_BASE}/get-tea-product`).then(res => res.json()),
-      fetch(`${API_BASE}/get-freeze-product`).then(res => res.json()),
-    ])
-      .then(([coffee, tea, freeze]) => {
-        const all = [...coffee, ...tea, ...freeze];
-        const mapped = all.map((p: any, idx: number) => {
-          // category_id: prefer number or string, never name
-          let category_id = p.category_id || p.categoryID || p.category || '';
-          if (typeof category_id === 'object' && category_id !== null && 'id' in category_id) {
-            category_id = category_id.id;
-          }
-          return {
-            ...p,
-            product_id: p.product_id || p.productID || p.id || p._id || (idx + 1),
-            category_id,
-            image_url: p.image_url || p.imageUrl || p.img || '',
-          };
-        });
+    api.getAllProducts()
+      .then((all: any[]) => {
+                 const mapped = all.map((p: any, idx: number) => {
+           // category_id: prefer number or string, never name
+           let category_id = p.category_id || p.categoryID || p.category || '';
+           if (typeof category_id === 'object' && category_id !== null && 'id' in category_id) {
+             category_id = category_id.id;
+           }
+           // Ensure we get the correct ID - try multiple possible fields
+           const productId = p.productId || p.id || p.product_id || p.productID || p._id || (idx + 1);
+           
+           return {
+             ...p,
+             product_id: productId,
+             category_id,
+             image_url: p.image_url || p.imageUrl || p.img || '',
+           };
+         });
         setProducts(mapped);
         setLoading(false);
       })
-      .catch(() => {
-        setError('Không thể tải danh sách sản phẩm');
-        setLoading(false);
-      });
+             .catch(() => {
+         setError('Không thể tải danh sách sản phẩm');
+         toast.error('Không thể tải danh sách sản phẩm', {
+           position: 'bottom-right',
+           autoClose: 3000,
+           hideProgressBar: false,
+           closeOnClick: true,
+           pauseOnHover: true,
+           draggable: true,
+         });
+         setLoading(false);
+       });
   };
 
   useEffect(() => {
     fetchProducts();
+    api.getAllCategories()
+      .then((cats) => {
+        setCategories(cats);
+        // Default select "Cà Phê" if available
+        const normalizeText = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const coffee = cats.find(c => normalizeText(c.name).includes('ca phe'));
+        if (coffee) {
+          setCategoryFilter(String(coffee.category_id));
+        }
+      })
+      .catch(() => setCategories([]));
   }, []);
 
-  const handleInput = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     if (type === 'file' && name === 'image') {
       const files = (e.target as HTMLInputElement).files;
@@ -107,6 +159,11 @@ const Products: React.FC = () => {
     setImageFile(null);
     setIsEdit(false);
     setShowForm(true);
+         // Test toast
+     toast.info('Test toast - Add button clicked!', {
+       position: 'bottom-right',
+       autoClose: 2000,
+     });
   };
 
   const handleEdit = (p: Product) => {
@@ -116,7 +173,7 @@ const Products: React.FC = () => {
       category_id:
         p.category_id && typeof p.category_id === 'object' && 'id' in (p.category_id as Record<string, unknown>)
           ? (p.category_id as Record<string, unknown>).id as string | number
-          : p.category_id,
+          : (resolveCategoryId(p.category_id) || p.category_id),
       product_id: p.product_id,
     });
     setPriceInput(p.price ? p.price.toLocaleString('en-US') : '');
@@ -133,88 +190,124 @@ const Products: React.FC = () => {
     e.preventDefault();
     setActionLoading(true);
     try {
-      const method = isEdit ? 'PUT' : 'POST';
-      const url = isEdit ? `${API_BASE}/update-product` : `${API_BASE}/add-product`;
       const formData = new FormData();
       if (isEdit) {
         formData.append('productId', String(form.product_id));
       }
+      // Use exact keys expected by backend
       formData.append('name', form.name);
       formData.append('description', form.description);
-      formData.append('categoryId', String(form.category_id));
+      const catId = resolveCategoryId(form.category_id);
+      if (!catId) {
+        throw new Error('Danh mục không hợp lệ');
+      }
+      formData.append('categoryId', catId);
       formData.append('price', String(form.price));
       if (imageFile) {
         formData.append('image', imageFile);
       } else if (!isEdit) {
         formData.append('image', '');
       }
-      const res = await fetch(url, {
-        method,
-        body: formData,
-      });
-      if (!res.ok) {
-        let msg = 'Lỗi thao tác';
-        try {
-          const err = await res.json();
-          if (err && err.message) msg = err.message;
-        } catch {
-          // ignore JSON parse error
-        }
-        throw new Error(msg);
+
+      if (isEdit) {
+        await api.updateProduct(formData);
+      } else {
+        await api.addProduct(formData);
       }
+
       setShowForm(false);
-      toast.success(isEdit ? 'Cập nhật sản phẩm thành công!' : 'Thêm sản phẩm thành công!', {
-        position: 'top-center',
-        autoClose: 2500,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-      });
+      console.log('About to show success toast');
+             toast.success(isEdit ? 'Cập nhật sản phẩm thành công!' : 'Thêm sản phẩm thành công!', {
+         position: 'bottom-right',
+         autoClose: 2500,
+         hideProgressBar: false,
+         closeOnClick: true,
+         pauseOnHover: true,
+         draggable: true,
+         progress: undefined,
+       });
+      console.log('Success toast called');
       fetchProducts();
-    } catch (err: unknown) {
-      alert('Có lỗi xảy ra khi lưu sản phẩm: ' + ((err as Error)?.message || ''));
-    } finally {
+         } catch (err: unknown) {
+       console.log('About to show error toast:', err);
+               toast.error('Có lỗi xảy ra khi lưu sản phẩm: ' + ((err as Error)?.message || ''), {
+          position: 'bottom-right',
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+       console.log('Error toast called');
+     } finally {
       setActionLoading(false);
     }
   };
 
-  const confirmDelete = async () => {
-    if (!deleteId) return;
-    setActionLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/delete-product/${deleteId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Lỗi xóa');
-      setDeleteId(null);
-      fetchProducts();
-    } catch {
-      alert('Có lỗi xảy ra khi xóa sản phẩm');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+     const confirmDelete = async () => {
+     if (!deleteId) return;
+     setActionLoading(true);
+     try {
+       await api.deleteProduct(deleteId);
+       setDeleteId(null);
+               toast.success('Xóa sản phẩm thành công!', {
+          position: 'bottom-right',
+          autoClose: 2500,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+       fetchProducts();
+     } catch (error) {
+               toast.error('Có lỗi xảy ra khi xóa sản phẩm: ' + (error as Error)?.message, {
+          position: 'bottom-right',
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+     } finally {
+       setActionLoading(false);
+     }
+   };
 
   if (loading) return <div className="p-8 text-center">Đang tải sản phẩm...</div>;
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
   return (
     <div className="p-8">
-      <ToastContainer />
       <h2 className="text-2xl font-bold mb-6">Danh sách sản phẩm</h2>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-        <input
-          type="text"
-          placeholder="Tìm kiếm theo tên sản phẩm..."
-          className="px-3 py-2 border rounded w-full sm:w-64"
-          value={filter}
-          onChange={e => {
-            setFilter(e.target.value);
-            setPage(1); // Reset về trang đầu khi filter
-          }}
-        />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 w-full">
+          <input
+            type="text"
+            placeholder="Tìm kiếm theo tên sản phẩm..."
+            className="px-3 py-2 border rounded w-full sm:w-72"
+            value={filter}
+            onChange={e => {
+              setFilter(e.target.value);
+              setPage(1); // Reset về trang đầu khi filter
+            }}
+          />
+          <select
+            className="px-3 py-2 border rounded w-full sm:w-56"
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPage(1);
+            }}
+            title="Lọc theo danh mục"
+          >
+            <option value="">Tất cả danh mục</option>
+            {categories.map((c) => (
+              <option key={`${c.category_id}-${c.name}`} value={String(c.category_id)}>{c.name}</option>
+            ))}
+          </select>
+        </div>
         <button
-          className="px-4 py-2 bg-[#6F4E37] text-white rounded hover:bg-[#543826]"
+          className="px-4 py-2 bg-[#6F4E37] text-white rounded hover:bg-[#543826] sm:ml-auto whitespace-nowrap shrink-0"
           onClick={handleAdd}
         >
           + Thêm sản phẩm
@@ -241,7 +334,7 @@ const Products: React.FC = () => {
                 style={{ borderColor: '#f0e4d7' }}
               >
                 <td className="py-3 px-5 font-mono text-sm align-middle">{p.product_id}</td>
-                <td className="py-3 px-5 font-mono text-sm align-middle">{p.category_id}</td>
+                <td className="py-3 px-5 font-mono text-sm align-middle">{categories.find(c => String(c.category_id) === String(p.category_id))?.name || p.category_id}</td>
                 <td className="py-3 px-5 font-semibold align-middle text-[#3d2c1e]">{p.name}</td>
                 {/* <td className="py-3 px-5 max-w-xs truncate" title={p.description}>{p.description}</td> */}
                 <td className="py-3 px-5 text-right align-middle text-[#6F4E37] font-medium">{p.price.toLocaleString()} đ</td>
@@ -254,7 +347,7 @@ const Products: React.FC = () => {
                   <button
                     title="Xem mô tả"
                     className="p-2 rounded-full hover:bg-yellow-100 text-yellow-600 text-xl transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                    onClick={() => setViewDesc(p.description)}
+                    onClick={() => setSelectedProduct(p)}
                   >
                     <MdVisibility />
                   </button>
@@ -308,17 +401,44 @@ const Products: React.FC = () => {
         </div>
       )}
 
-      {/* View Description Modal - render outside table, only once */}
-      {viewDesc && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg min-w-[300px] max-w-[90vw]">
-            <h3 className="text-lg font-bold mb-4">Mô tả sản phẩm</h3>
-            <div className="mb-4 whitespace-pre-line break-words">{viewDesc}</div>
-            <div className="flex gap-2 justify-end">
+      {/* Product Details Modal */}
+      {selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 px-3">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="text-xl font-bold text-[#3d2c1e] truncate pr-4">{selectedProduct.name}</h3>
               <button
-                className="px-4 py-1 bg-gray-300 rounded hover:bg-gray-400"
-                onClick={() => setViewDesc(null)}
+                className="px-3 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                onClick={() => setSelectedProduct(null)}
               >Đóng</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 p-6">
+              <div className="md:col-span-1">
+                <img
+                  src={selectedProduct.image_url}
+                  alt={selectedProduct.name}
+                  className="w-full h-56 object-cover rounded-xl border border-[#e2d3c2]"
+                />
+              </div>
+              <div className="md:col-span-2 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    <span className="px-3 py-1 rounded-full bg-[#F5E9DD] text-[#6F4E37] font-semibold">
+                      {getCategoryNameByIdOrValue(selectedProduct.category_id)}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">Giá</div>
+                    <div className="text-2xl font-extrabold text-[#6F4E37] tracking-wide">{formatCurrency(selectedProduct.price)}</div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-[#6F4E37] mb-1">Mô tả chi tiết</h4>
+                  <div className="text-sm leading-6 whitespace-pre-line break-words bg-[#faf7f3] border border-[#f0e4d7] rounded-lg p-4">
+                    {selectedProduct.description}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -332,16 +452,17 @@ const Products: React.FC = () => {
           >
             <h3 className="text-lg font-bold mb-4">{isEdit ? 'Sửa sản phẩm' : 'Thêm sản phẩm'}</h3>
             <div className="mb-2">
-              <label className="block text-sm mb-1">Tên sản phẩm</label>
-              <input name="name" value={form.name} onChange={handleInput} className="w-full border px-2 py-1 rounded" required />
+              <label htmlFor="name" className="block text-sm mb-1">Tên sản phẩm</label>
+              <input id="name" name="name" value={form.name} onChange={handleInput} className="w-full border px-2 py-1 rounded" required placeholder="Nhập tên sản phẩm" title="Tên sản phẩm" />
             </div>
             <div className="mb-2">
-              <label className="block text-sm mb-1">Mô tả</label>
-              <textarea name="description" value={form.description} onChange={handleInput} className="w-full border px-2 py-1 rounded" required />
+              <label htmlFor="description" className="block text-sm mb-1">Mô tả</label>
+              <textarea id="description" name="description" value={form.description} onChange={handleInput} className="w-full border px-2 py-1 rounded" required placeholder="Mô tả sản phẩm" title="Mô tả" />
             </div>
             <div className="mb-2">
-              <label className="block text-sm mb-1">Giá</label>
+              <label htmlFor="price" className="block text-sm mb-1">Giá</label>
               <input
+                id="price"
                 name="price"
                 type="text"
                 inputMode="numeric"
@@ -352,15 +473,32 @@ const Products: React.FC = () => {
                 min={0}
                 placeholder="Nhập giá..."
                 autoComplete="off"
+                title="Giá"
               />
             </div>
             <div className="mb-2">
-              <label className="block text-sm mb-1">Category ID</label>
-              <input name="category_id" value={form.category_id} onChange={handleInput} className="w-full border px-2 py-1 rounded" required />
+              <label htmlFor="category_id" className="block text-sm mb-1">Danh mục</label>
+              <select
+                id="category_id"
+                name="category_id"
+                value={String(form.category_id)}
+                onChange={handleInput}
+                className="w-full border px-2 py-1 rounded"
+                required
+                title="Chọn danh mục"
+              >
+                <option value="" disabled>-- Chọn danh mục --</option>
+                {categories.map((c) => {
+                  const key = `${String(c.category_id)}-${c.name}`;
+                  return (
+                    <option key={key} value={String(c.category_id)}>{c.name}</option>
+                  );
+                })}
+              </select>
             </div>
             <div className="mb-4">
-              <label className="block text-sm mb-1">Ảnh (file)</label>
-              <input name="image" type="file" accept="image/*" onChange={handleInput} className="w-full border px-2 py-1 rounded" required={!isEdit} />
+              <label htmlFor="image" className="block text-sm mb-1">Ảnh (file)</label>
+              <input id="image" name="image" type="file" accept="image/*" onChange={handleInput} className="w-full border px-2 py-1 rounded" required={!isEdit} title="Chọn ảnh" />
               {form.image_url && (
                 <img src={form.image_url} alt="Preview" className="mt-2 w-24 h-24 object-cover rounded" />
               )}
