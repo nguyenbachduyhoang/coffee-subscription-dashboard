@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { useAuth } from './hooks/useAuth';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
@@ -62,6 +64,7 @@ function App() {
           </main>
         </div>
       </div>
+      <ToastContainer />
     </Router>
   );
 }
