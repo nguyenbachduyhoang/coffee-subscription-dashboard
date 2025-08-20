@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Edit, Trash2, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { planApi, Plan, CreatePlanRequest, UpdatePlanRequest } from '../utils/apiPlan';
 
 interface Package {
@@ -158,15 +158,16 @@ const Packages: React.FC = () => {
     }
   };
 
-  const handleDelete = async (packageId: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa gói dịch vụ này?')) {
+  const handleUnactivePlan = async (packageId: string) => {
+    if (confirm('Bạn có chắc chắn muốn vô hiệu hóa gói dịch vụ này?')) {
       try {
-        await planApi.deletePlan(parseInt(packageId));
-        setPackages(packages.filter(p => p.id !== packageId));
-        showSuccessMessage('Xóa gói dịch vụ thành công!');
+        await planApi.unactivePlan(parseInt(packageId));
+        showSuccessMessage('Vô hiệu hóa gói dịch vụ thành công!');
+        // Reload data from server to get latest status
+        await loadPackages(false);
       } catch (err) {
-        console.error('Error deleting package:', err);
-        alert('Có lỗi xảy ra khi xóa gói dịch vụ');
+        console.error('Error unactivating plan:', err);
+        alert('Có lỗi xảy ra khi vô hiệu hóa gói dịch vụ');
       }
     }
   };
@@ -328,12 +329,17 @@ const Packages: React.FC = () => {
                         <Edit className="w-4 h-4 mr-2" />
                         Sửa
                       </button>
-                      <button
-                        onClick={() => handleDelete(pkg.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {pkg.active && (
+                        <button
+                          onClick={() => handleUnactivePlan(pkg.id)}
+                          className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors duration-200"
+                          title="Vô hiệu hóa"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </motion.div>

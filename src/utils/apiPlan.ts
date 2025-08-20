@@ -199,6 +199,23 @@ export const planApi = {
       throw error;
     }
   },
+
+  // Unactive plan
+  unactivePlan: async (planId: number): Promise<void> => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/Plan/unactive/${planId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error unactivating plan:', error);
+      throw error;
+    }
+  },
 };
 
 export default planApi;
