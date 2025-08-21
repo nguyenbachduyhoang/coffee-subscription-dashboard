@@ -2,7 +2,6 @@ import axios from 'axios';
 
 const AUTH_STORAGE_KEY = 'coffee-admin-auth';
 
-console.log('API Base URL:', import.meta.env.VITE_API_BASE_URL);
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://minhkhoi02-001-site1.anytempurl.com';
 
 const axiosInstance = axios.create({
@@ -10,14 +9,12 @@ const axiosInstance = axios.create({
   timeout: 10000,
   withCredentials: false,
   headers: {
-    'Content-Type': 'application/json',
+    // Do not set global Content-Type so axios can set JSON or multipart automatically per request
     'Accept': 'application/json'
   }
 });
 
 axiosInstance.interceptors.request.use(request => {
-  // improve logging to show full request URL
-  console.log('Starting Request:', (request.baseURL || '') + (request.url || ''));
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (raw) {
@@ -25,28 +22,49 @@ axiosInstance.interceptors.request.use(request => {
       const token = parsed?.token;
       if (token) {
         request.headers = request.headers || {};
-        // attach bearer token
         (request.headers as any)['Authorization'] = `Bearer ${token}`;
       }
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch {}
   return request;
 });
 
 axiosInstance.interceptors.response.use(
   response => response,
   error => {
+    // handle unauthorized → clear auth so user can login again
+    if (error?.response?.status === 401) {
+      try {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      } catch {}
+    }
     // normalize error message
     const msg = error?.response?.data?.message || error?.response?.data || error?.message || 'API error';
     return Promise.reject(new Error(typeof msg === 'string' ? msg : JSON.stringify(msg)));
   }
 );
 
+function normalizeToken(rawToken: string): string {
+  let token = rawToken?.trim() || '';
+  if (token.length >= 2 && ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'")))) {
+    token = token.slice(1, -1);
+  }
+  if (token.toLowerCase().startsWith('bearer ')) {
+    token = token.slice(7);
+  }
+  return token;
+}
+
 export async function login(username: string, password: string): Promise<string> {
   const res = await axiosInstance.post('/api/Staff/login', { email: username, password }, { responseType: 'text' });
-  return res.data as string;
+  let tokenCandidate: any = res.data;
+  if (typeof tokenCandidate === 'string') {
+    tokenCandidate = normalizeToken(tokenCandidate);
+  } else if (tokenCandidate && typeof tokenCandidate === 'object') {
+    const possible = tokenCandidate.token || tokenCandidate.accessToken || tokenCandidate.access_token;
+    tokenCandidate = normalizeToken(String(possible || ''));
+  }
+  return String(tokenCandidate || '');
 }
 
 export async function getAllProducts(): Promise<any[]> {
@@ -62,17 +80,24 @@ export async function getAllProducts(): Promise<any[]> {
 }
 
 export async function addProduct(formData: FormData) {
-  return axiosInstance.post('/api/Product/add-product', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
+  // Do not set Content-Type; let the browser add proper multipart boundary
+  return axiosInstance.post('/api/Product/add-product', formData);
+}
+
+export async function getAllCategories(): Promise<Array<{ category_id: number | string; name: string }>> {
+  const res = await axiosInstance.get('/api/Category/get-all-category');
+  const raw = (res.data as any[]) || [];
+  return raw.map((c: any, index: number) => ({
+    category_id: c?.category_id ?? c?.categoryID ?? c?.categoryId ?? c?.id ?? String(index + 1),
+    name: c?.name ?? c?.categoryName ?? c?.category ?? `Danh mục ${index + 1}`,
+  }));
 }
 
 export async function updateProduct(formData: FormData) {
-  return axiosInstance.put('/api/Product/update-product', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
+  return axiosInstance.put('/api/Product/update-product', formData);
 }
 
 export async function deleteProduct(id: string | number) {
-  return axiosInstance.delete(`/api/Product/delete-product/${id}`);
+  const numericId = Number(String(id).trim());
+  return axiosInstance.delete(`/api/Product/delete-product/${Number.isFinite(numericId) ? numericId : id}`);
 }
