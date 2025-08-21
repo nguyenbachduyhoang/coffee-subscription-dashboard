@@ -34,17 +34,14 @@ const Packages: React.FC = () => {
 
   // Helper function to show success message
   const showSuccessMessage = (message: string) => {
-    console.log('Setting success message:', message);
     setSuccessMessage(message);
     setTimeout(() => {
-      console.log('Auto-hiding success message');
       setSuccessMessage(null);
     }, 3000);
   };
 
   // Convert Plan to Package
   const convertPlanToPackage = (plan: Plan): Package => {
-    console.log('Converting plan to package:', plan);
     return {
       id: plan.planId?.toString() || '0',
       name: plan.name || '',
@@ -53,7 +50,8 @@ const Packages: React.FC = () => {
       durationDays: plan.durationDays || 1,
       description: plan.description || '',
       productName: plan.productName || '',
-      productId: 0, // Default value, this should be updated according to your API response
+      // Prefer productId from API when available; otherwise try to infer from loaded products by matching name
+      productId: plan.productId ?? (products.find(p => p.name === plan.productName)?.productId || 0),
       imageUrl: plan.imageUrl || '',
       dailyQuota: plan.dailyQuota || 1,
       maxPerVisit: plan.maxPerVisit || 1,
@@ -124,17 +122,13 @@ const Packages: React.FC = () => {
     try {
       if (modalMode === 'add') {
         const createRequest = convertPackageToCreateRequest(packageData);
-        console.log('Create request:', createRequest);
-        
         const newPlan = await planApi.createPlan(createRequest);
-        console.log('New plan from API:', newPlan);
         
         if (!newPlan) {
           throw new Error('API trả về dữ liệu không hợp lệ');
         }
         
         const newPackage = convertPlanToPackage(newPlan);
-        console.log('Converted package:', newPackage);
         
         setPackages([...packages, newPackage]);
         showSuccessMessage('Tạo gói dịch vụ thành công!');
@@ -143,7 +137,6 @@ const Packages: React.FC = () => {
           name: packageData.name,
           description: packageData.description,
           productId: packageData.productId,
-          imageUrl: packageData.imageUrl,
           price: packageData.price,
           durationDays: packageData.durationDays,
           dailyQuota: packageData.dailyQuota,
@@ -183,8 +176,6 @@ const Packages: React.FC = () => {
       }
     }
   };
-
-  console.log('Render - successMessage:', successMessage);
 
   // Pagination calculations
   const totalPages = Math.ceil(packages.length / itemsPerPage);
@@ -251,6 +242,8 @@ const Packages: React.FC = () => {
                   <button
                     onClick={() => setSuccessMessage(null)}
                     className="inline-flex bg-green-50 rounded-md p-1.5 text-green-500 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-green-50 focus:ring-green-600 transition-colors duration-200"
+                    aria-label="Đóng thông báo"
+                    title="Đóng thông báo"
                   >
                     <span className="sr-only">Dismiss</span>
                     <X className="h-3 w-3" />
@@ -369,6 +362,8 @@ const Packages: React.FC = () => {
                       ? 'text-gray-400 cursor-not-allowed'
                       : 'text-[#6F4E37] hover:bg-[#6F4E37] hover:text-white'
                   }`}
+                  aria-label="Trang trước"
+                  title="Trang trước"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -395,6 +390,8 @@ const Packages: React.FC = () => {
                       ? 'text-gray-400 cursor-not-allowed'
                       : 'text-[#6F4E37] hover:bg-[#6F4E37] hover:text-white'
                   }`}
+                  aria-label="Trang sau"
+                  title="Trang sau"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
@@ -453,6 +450,21 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
     active: pkg?.active !== undefined ? pkg?.active : true
   });
 
+  // When editing, auto-select the product that belongs to the plan
+  useEffect(() => {
+    if (mode === 'edit') {
+      const inferredId = pkg?.productId || products.find(p => p.name === (pkg?.productName || ''))?.productId || 0;
+      if (inferredId && formData.productId !== inferredId) {
+        const inferredProduct = products.find(p => p.productId === inferredId);
+        setFormData(prev => ({
+          ...prev,
+          productId: inferredId,
+          productName: inferredProduct?.name || prev.productName,
+        }));
+      }
+    }
+  }, [mode, pkg, products]);
+
   const [priceDisplay, setPriceDisplay] = useState(
     formData.price ? formData.price.toLocaleString('vi-VN') : ''
   );
@@ -491,26 +503,30 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
           <h3 className="text-lg font-semibold text-[#6F4E37]">
             {mode === 'add' ? 'Thêm gói dịch vụ' : 'Chỉnh sửa gói dịch vụ'}
           </h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" aria-label="Đóng" title="Đóng">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tên gói</label>
+            <label htmlFor="package-name" className="block text-sm font-medium text-gray-700 mb-2">Tên gói</label>
             <input
+              id="package-name"
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
               required
+              placeholder="Nhập tên gói"
+              title="Tên gói"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Sản phẩm</label>
+            <label htmlFor="product-select" className="block text-sm font-medium text-gray-700 mb-2">Sản phẩm</label>
             <select
+              id="product-select"
               value={formData.productId}
               onChange={(e) => {
                 const selectedProductId = Number(e.target.value);
@@ -523,6 +539,7 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
               required
+              title="Chọn sản phẩm"
             >
               <option value={0}>Chọn sản phẩm...</option>
               {products.map((product) => (
@@ -535,76 +552,79 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Giá (VNĐ)</label>
+              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-2">Giá (VNĐ)</label>
               <input
+                id="price"
                 type="text"
                 value={priceDisplay}
                 onChange={handlePriceChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
                 placeholder="0"
                 required
+                title="Giá"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Thời hạn (ngày)</label>
+              <label htmlFor="duration-days" className="block text-sm font-medium text-gray-700 mb-2">Thời hạn (ngày)</label>
               <input
+                id="duration-days"
                 type="number"
                 value={formData.durationDays}
                 onChange={(e) => setFormData({ ...formData, durationDays: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
                 required
+                placeholder="Số ngày"
+                title="Thời hạn (ngày)"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Hạn mức hàng ngày</label>
+              <label htmlFor="daily-quota" className="block text-sm font-medium text-gray-700 mb-2">Hạn mức hàng ngày</label>
               <input
+                id="daily-quota"
                 type="number"
                 value={formData.dailyQuota}
                 onChange={(e) => setFormData({ ...formData, dailyQuota: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
                 required
+                placeholder="Số ly/ngày"
+                title="Hạn mức hàng ngày"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tối đa mỗi lần</label>
+              <label htmlFor="max-per-visit" className="block text-sm font-medium text-gray-700 mb-2">Tối đa mỗi lần</label>
               <input
+                id="max-per-visit"
                 type="number"
                 value={formData.maxPerVisit}
                 onChange={(e) => setFormData({ ...formData, maxPerVisit: Number(e.target.value) })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
                 required
+                placeholder="Số ly/lần"
+                title="Tối đa mỗi lần"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả</label>
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">Mô tả</label>
             <textarea
+              id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
               rows={3}
               required
+              placeholder="Mô tả gói"
+              title="Mô tả"
             />
           </div>
 
-          {mode === 'edit' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">URL hình ảnh</label>
-              <input
-                type="url"
-                value={formData.imageUrl}
-                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
-                placeholder="https://example.com/image.jpg"
-              />
-            </div>
-          )}
+          {/* Bỏ chỉnh sửa ảnh theo yêu cầu */}
 
           <div className="flex items-center">
             <input

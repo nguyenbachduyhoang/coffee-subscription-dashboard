@@ -2,6 +2,8 @@ export interface Plan {
   planId: number;
   name: string;
   description: string;
+  // Optional: some endpoints may return productId alongside productName
+  productId?: number;
   productName: string;
   imageUrl: string;
   price: number;
@@ -51,20 +53,25 @@ const getAuthHeaders = () => {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  
+
   try {
     const storedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
     if (storedAuth) {
       const authData = JSON.parse(storedAuth);
-      const token = authData?.token;
+      let token: string = String(authData?.token || '').trim();
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        // Normalize accidental quotes
+        if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+          token = token.slice(1, -1);
+        }
+        const hasBearer = token.toLowerCase().startsWith('bearer ');
+        headers['Authorization'] = hasBearer ? token : `Bearer ${token}`;
       }
     }
   } catch (error) {
     console.error('Error getting auth token:', error);
   }
-  
+
   return headers;
 };
 
@@ -138,33 +145,21 @@ export const planApi = {
   // Create new plan
   createPlan: async (plan: CreatePlanRequest): Promise<Plan> => {
     try {
-      console.log('Creating plan with data:', plan);
-      console.log('Request URL:', `${BASE_URL}/api/Plan/add-plan`);
-      
       const headers = getAuthHeaders();
-      console.log('Request headers:', headers);
-      
       const response = await fetch(`${BASE_URL}/api/Plan/add-plan`, {
         method: 'POST',
         headers,
         body: JSON.stringify(plan),
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response:', errorText);
         throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
 
       const responseData = await response.json();
-      console.log('Raw response data:', responseData);
-      
       // Check if response has data property (API returns {message: '...', data: {...}})
       const planData = responseData.data || responseData;
-      console.log('Extracted plan data:', planData);
       return planData;
     } catch (error) {
       console.error('Error creating plan:', error);
@@ -175,10 +170,15 @@ export const planApi = {
   // Update plan
   updatePlan: async (planId: number, plan: UpdatePlanRequest): Promise<Plan> => {
     try {
-      const response = await fetch(`${BASE_URL}/api/Plan/${planId}`, {
+      // Swagger shows: PUT /api/Plan/update-plan with id as query parameter
+      const url = `${BASE_URL}/api/Plan/update-plan?id=${encodeURIComponent(planId)}`;
+      const body = { planId, ...plan } as any;
+      const headers = getAuthHeaders();
+      headers['Accept'] = 'application/json';
+      const response = await fetch(url, {
         method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(plan),
+        headers,
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

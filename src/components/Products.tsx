@@ -159,11 +159,6 @@ const Products: React.FC = () => {
     setImageFile(null);
     setIsEdit(false);
     setShowForm(true);
-         // Test toast
-     toast.info('Test toast - Add button clicked!', {
-       position: 'bottom-right',
-       autoClose: 2000,
-     });
   };
 
   const handleEdit = (p: Product) => {
@@ -216,30 +211,26 @@ const Products: React.FC = () => {
       }
 
       setShowForm(false);
-      console.log('About to show success toast');
-             toast.success(isEdit ? 'Cập nhật sản phẩm thành công!' : 'Thêm sản phẩm thành công!', {
-         position: 'bottom-right',
-         autoClose: 2500,
-         hideProgressBar: false,
-         closeOnClick: true,
-         pauseOnHover: true,
-         draggable: true,
-         progress: undefined,
-       });
-      console.log('Success toast called');
+      toast.success(isEdit ? 'Cập nhật sản phẩm thành công!' : 'Thêm sản phẩm thành công!', {
+        position: 'bottom-right',
+        autoClose: 2500,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+      });
       fetchProducts();
-         } catch (err: unknown) {
-       console.log('About to show error toast:', err);
-               toast.error('Có lỗi xảy ra khi lưu sản phẩm: ' + ((err as Error)?.message || ''), {
-          position: 'bottom-right',
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
-       console.log('Error toast called');
-     } finally {
+    } catch (err: unknown) {
+      toast.error('Có lỗi xảy ra khi lưu sản phẩm: ' + ((err as Error)?.message || ''), {
+        position: 'bottom-right',
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    } finally {
       setActionLoading(false);
     }
   };
