@@ -34,6 +34,16 @@ export interface UpdatePlanRequest {
   active?: boolean;
 }
 
+export interface Product {
+  productId: number;
+  name: string;
+  description: string;
+  price: number;
+  imageUrl: string;
+  categoryId: number;
+  categoryName: string;
+}
+
 const AUTH_STORAGE_KEY = 'coffee-admin-auth';
 
 // Helper function to get authorization headers
@@ -61,6 +71,28 @@ const getAuthHeaders = () => {
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://minhkhoi02-001-site1.anytempurl.com';
 
 export const planApi = {
+  // Get all products
+  getAllProducts: async (): Promise<Product[]> => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/Product/get-all-products`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      // Handle both direct array and wrapped response
+      const products = responseData.data || responseData;
+      return Array.isArray(products) ? products : [];
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      throw error;
+    }
+  },
+
   // Get all plans
   getAllPlans: async (): Promise<Plan[]> => {
     try {

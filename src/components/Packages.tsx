@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { planApi, Plan, CreatePlanRequest, UpdatePlanRequest } from '../utils/apiPlan';
+import { planApi, Plan, CreatePlanRequest, UpdatePlanRequest, Product } from '../utils/apiPlan';
 
 interface Package {
   id: string;
@@ -20,6 +20,7 @@ interface Package {
 
 const Packages: React.FC = () => {
   const [packages, setPackages] = useState<Package[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'edit' | 'add'>('add');
@@ -93,9 +94,20 @@ const Packages: React.FC = () => {
     }
   }, []);
 
+  // Load products from API
+  const loadProducts = useCallback(async () => {
+    try {
+      const products = await planApi.getAllProducts();
+      setProducts(products);
+    } catch (err) {
+      console.error('Error loading products:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadPackages();
-  }, [loadPackages]);
+    loadProducts();
+  }, [loadPackages, loadProducts]);
 
   const openModal = (pkg: Package | null, mode: 'edit' | 'add') => {
     setSelectedPackage(pkg);
@@ -409,6 +421,7 @@ const Packages: React.FC = () => {
       {isModalOpen && (
         <PackageModal
           package={selectedPackage}
+          products={products}
           mode={modalMode}
           onClose={closeModal}
           onSave={handleSave}
@@ -420,12 +433,13 @@ const Packages: React.FC = () => {
 
 interface PackageModalProps {
   package: Package | null;
+  products: Product[];
   mode: 'edit' | 'add';
   onClose: () => void;
   onSave: (packageData: Partial<Package>) => void;
 }
 
-const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose, onSave }) => {
+const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mode, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: pkg?.name || '',
     price: pkg?.price || 0,
@@ -495,14 +509,28 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, mode, onClose
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">ID sản phẩm</label>
-            <input
-              type="number"
+            <label className="block text-sm font-medium text-gray-700 mb-2">Sản phẩm</label>
+            <select
               value={formData.productId}
-              onChange={(e) => setFormData({ ...formData, productId: Number(e.target.value) })}
+              onChange={(e) => {
+                const selectedProductId = Number(e.target.value);
+                const selectedProduct = products.find(p => p.productId === selectedProductId);
+                setFormData({ 
+                  ...formData, 
+                  productId: selectedProductId,
+                  productName: selectedProduct?.name || ''
+                });
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
               required
-            />
+            >
+              <option value={0}>Chọn sản phẩm...</option>
+              {products.map((product) => (
+                <option key={product.productId} value={product.productId}>
+                  {product.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
