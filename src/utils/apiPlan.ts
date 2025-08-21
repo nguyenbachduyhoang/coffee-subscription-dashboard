@@ -75,7 +75,11 @@ const getAuthHeaders = () => {
   return headers;
 };
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://minhkhoi02-001-site1.anytempurl.com';
+// In production over HTTPS, ignore an http:// env base to avoid mixed content
+const envBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+const isHttpsPage = typeof window !== 'undefined' && window.location?.protocol === 'https:';
+const shouldIgnoreEnvBase = !!(envBaseUrl && envBaseUrl.startsWith('http://') && isHttpsPage);
+const BASE_URL = shouldIgnoreEnvBase ? '' : (envBaseUrl || '');
 
 export const planApi = {
   // Get all products

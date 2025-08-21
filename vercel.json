@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "http://minhkhoi02-001-site1.anytempurl.com/api/$1"
+    }
+  ]
+}
+
+
