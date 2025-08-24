@@ -1,58 +1,99 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Edit, Trash2, Eye, Plus, X } from 'lucide-react';
-import { getDemoData, updateUser, deleteUser, addUser } from '../utils/demoData';
+import { Search, Edit, Trash2, Eye, Plus } from 'lucide-react';
+import { apiService } from '../services/apiService';
+import { useApi, useMutation } from '../hooks/useApi';
+import { User } from '../types/api';
+import UserModal from './UserModal';
+import DeleteModal from './DeleteModal';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  registeredAt: string;
-  status: 'active' | 'inactive';
-}
+// User interface moved to types/api.ts
 
 const Users: React.FC = () => {
-  const { users: initialUsers } = getDemoData();
-  const [users, setUsers] = useState<User[]>(initialUsers);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
+  const [deleteUser, setDeleteUser] = useState<User | null>(null);
 
-  const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  // API hooks
+  const { data: users = [], loading, error, refetch } = useApi(
+    () => apiService.getUsers(),
+    []
   );
 
-  const openModal = (user: User | null, mode: 'view' | 'edit' | 'add') => {
+  const createUserMutation = useMutation((userData: Partial<User>) => 
+    apiService.createUser(userData)
+  );
+  
+  const updateUserMutation = useMutation(({ id, userData }: { id: string; userData: Partial<User> }) => 
+    apiService.updateUser(id, userData)
+  );
+  
+  const deleteUserMutation = useMutation((id: string) => 
+    apiService.deleteUser(id)
+  );
+
+  // Memoized filtered users for performance
+  const filteredUsers = useMemo(() => {
+    if (!users || users.length === 0) return [];
+    if (!searchTerm) return users;
+    
+    const searchLower = searchTerm.toLowerCase();
+    return users.filter(user =>
+      user.name.toLowerCase().includes(searchLower) ||
+      user.email.toLowerCase().includes(searchLower)
+    );
+  }, [users, searchTerm]);
+
+  const openModal = useCallback((user: User | null, mode: 'view' | 'edit' | 'add') => {
     setSelectedUser(user);
     setModalMode(mode);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedUser(null);
-  };
+    // Reset mutation errors
+    createUserMutation.reset();
+    updateUserMutation.reset();
+  }, [createUserMutation, updateUserMutation]);
 
-  const handleSave = (userData: Partial<User>) => {
-    if (modalMode === 'add') {
-      const newUser = addUser(userData as Omit<User, 'id'>);
-      setUsers([...users, newUser]);
-    } else if (modalMode === 'edit' && selectedUser) {
-      const updatedUser = updateUser(selectedUser.id, userData);
-      setUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u));
+  const handleSave = useCallback(async (userData: Partial<User>) => {
+    try {
+      if (modalMode === 'add') {
+        await createUserMutation.mutate(userData);
+      } else if (modalMode === 'edit' && selectedUser) {
+        await updateUserMutation.mutate({ id: selectedUser.id, userData });
+      }
+      await refetch(); // Refresh list
+      closeModal();
+    } catch (err) {
+      // Error is already handled by mutation hook
+      console.error('Error saving user:', err);
     }
-    closeModal();
-  };
+  }, [modalMode, selectedUser, createUserMutation, updateUserMutation, refetch, closeModal]);
 
-  const handleDelete = (userId: string) => {
-    if (confirm('Bạn có chắc chắn muốn xóa người dùng này?')) {
-      deleteUser(userId);
-      setUsers(users.filter(u => u.id !== userId));
+  const handleDelete = useCallback((user: User) => {
+    setDeleteUser(user);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteUser) return;
+    try {
+      await deleteUserMutation.mutate(deleteUser.id);
+      await refetch(); // Refresh list
+      setDeleteUser(null);
+    } catch (err) {
+      // Error is already handled by mutation hook
+      console.error('Error deleting user:', err);
     }
-  };
+  }, [deleteUser, deleteUserMutation, refetch]);
+
+  // Combined error from all sources
+  const combinedError = error || createUserMutation.error || updateUserMutation.error || deleteUserMutation.error;
+  const isAnyLoading = loading || createUserMutation.loading || updateUserMutation.loading || deleteUserMutation.loading;
 
   return (
     <div className="space-y-6">
@@ -84,8 +125,24 @@ const Users: React.FC = () => {
           />
         </div>
 
+        {/* Error Message */}
+        {combinedError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {combinedError}
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isAnyLoading && (
+          <div className="text-center py-8">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#6F4E37]"></div>
+            <p className="mt-2 text-gray-600">Đang tải...</p>
+          </div>
+        )}
+
         {/* Users Table */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        {!isAnyLoading && (
+          <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-[#6F4E37] text-white">
@@ -127,18 +184,21 @@ const Users: React.FC = () => {
                         <button
                           onClick={() => openModal(user, 'view')}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                          title="Xem chi tiết"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => openModal(user, 'edit')}
                           className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
+                          title="Chỉnh sửa"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => handleDelete(user)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                          title="Xóa"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -149,134 +209,37 @@ const Users: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        )}
+
+        {filteredUsers.length === 0 && !isAnyLoading && (
+          <div className="text-center py-12 text-gray-500">
+            Không tìm thấy người dùng nào.
+          </div>
+        )}
       </motion.div>
 
       {/* Modal */}
-      {isModalOpen && (
-        <UserModal
-          user={selectedUser}
-          mode={modalMode}
-          onClose={closeModal}
-          onSave={handleSave}
-        />
-      )}
+      <UserModal
+        user={selectedUser}
+        mode={modalMode}
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        onSave={handleSave}
+        loading={createUserMutation.loading || updateUserMutation.loading}
+        error={createUserMutation.error || updateUserMutation.error}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteModal
+        isOpen={!!deleteUser}
+        onClose={() => setDeleteUser(null)}
+        onConfirm={confirmDelete}
+        title="Xóa người dùng"
+        itemName={deleteUser ? `${deleteUser.name} (${deleteUser.email})` : ''}
+        loading={deleteUserMutation.loading}
+      />
     </div>
-  );
-};
-
-interface UserModalProps {
-  user: User | null;
-  mode: 'view' | 'edit' | 'add';
-  onClose: () => void;
-  onSave: (userData: Partial<User>) => void;
-}
-
-const UserModal: React.FC<UserModalProps> = ({ user, mode, onClose, onSave }) => {
-  const [formData, setFormData] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
-    status: user?.status || 'active'
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave(formData);
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white rounded-xl shadow-xl w-full max-w-md"
-      >
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-[#6F4E37]">
-            {mode === 'add' ? 'Thêm người dùng' : mode === 'edit' ? 'Chỉnh sửa người dùng' : 'Chi tiết người dùng'}
-          </h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tên</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              disabled={mode === 'view'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none disabled:bg-gray-50"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              disabled={mode === 'view'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none disabled:bg-gray-50"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Số điện thoại</label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              disabled={mode === 'view'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none disabled:bg-gray-50"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Trạng thái</label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-              disabled={mode === 'view'}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none disabled:bg-gray-50"
-            >
-              <option value="active">Hoạt động</option>
-              <option value="inactive">Không hoạt động</option>
-            </select>
-          </div>
-
-          {mode !== 'view' && (
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-[#6F4E37] text-white rounded-lg hover:bg-[#5A3E2D] transition-colors duration-200"
-              >
-                {mode === 'add' ? 'Thêm' : 'Lưu'}
-              </button>
-            </div>
-          )}
-        </form>
-      </motion.div>
-    </motion.div>
   );
 };
 
