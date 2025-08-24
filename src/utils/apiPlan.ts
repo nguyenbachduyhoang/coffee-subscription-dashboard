@@ -46,7 +46,7 @@ export interface Product {
   categoryName: string;
 }
 
-const AUTH_STORAGE_KEY = 'coffee-admin-auth';
+const AUTH_STORAGE_KEY = 'coffee-admin-auth'; // Match storage service prefix + key
 
 // Helper function to get authorization headers
 const getAuthHeaders = () => {
@@ -56,20 +56,39 @@ const getAuthHeaders = () => {
 
   try {
     const storedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
+    
     if (storedAuth) {
-      const authData = JSON.parse(storedAuth);
+      const authStorageData = JSON.parse(storedAuth);
+      
+      // Enhanced storage service wraps data in {value: ..., timestamp: ..., expiresAt: ...}
+      const authData = authStorageData.value || authStorageData;
+      
+      console.log('🔐 Auth Debug:', { 
+        rawStorage: authStorageData, 
+        extractedAuth: authData,
+        token: authData?.token 
+      });
+      
       let token: string = String(authData?.token || '').trim();
+      
       if (token) {
         // Normalize accidental quotes
         if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
           token = token.slice(1, -1);
         }
         const hasBearer = token.toLowerCase().startsWith('bearer ');
-        headers['Authorization'] = hasBearer ? token : `Bearer ${token}`;
+        const finalAuth = hasBearer ? token : `Bearer ${token}`;
+        headers['Authorization'] = finalAuth;
+        
+        console.log('✅ Auth Header Set:', finalAuth.substring(0, 20) + '...');
+      } else {
+        console.warn('⚠️ No token found in auth data');
       }
+    } else {
+      console.warn('⚠️ No auth data in localStorage');
     }
   } catch (error) {
-    console.error('Error getting auth token:', error);
+    console.error('❌ Error getting auth token:', error);
   }
 
   return headers;
@@ -85,7 +104,7 @@ export const planApi = {
   // Get all products
   getAllProducts: async (): Promise<Product[]> => {
     try {
-      const response = await fetch(`${BASE_URL}/api/Product/get-all-products`, {
+      const response = await fetch(`${BASE_URL}/api/products`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -107,7 +126,7 @@ export const planApi = {
   // Get all plans
   getAllPlans: async (): Promise<Plan[]> => {
     try {
-      const response = await fetch(`${BASE_URL}/api/Plan/get-all-plans`, {
+      const response = await fetch(`${BASE_URL}/api/plans`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -129,7 +148,7 @@ export const planApi = {
   // Get plan by ID
   getPlanById: async (planId: number): Promise<Plan> => {
     try {
-      const response = await fetch(`${BASE_URL}/api/Plan/${planId}`, {
+      const response = await fetch(`${BASE_URL}/api/plans/${planId}`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -150,7 +169,7 @@ export const planApi = {
   createPlan: async (plan: CreatePlanRequest): Promise<Plan> => {
     try {
       const headers = getAuthHeaders();
-      const response = await fetch(`${BASE_URL}/api/Plan/add-plan`, {
+      const response = await fetch(`${BASE_URL}/api/plans`, {
         method: 'POST',
         headers,
         body: JSON.stringify(plan),
@@ -174,9 +193,11 @@ export const planApi = {
   // Update plan
   updatePlan: async (planId: number, plan: UpdatePlanRequest): Promise<Plan> => {
     try {
-      // Swagger shows: PUT /api/Plan/update-plan with id as query parameter
-      const url = `${BASE_URL}/api/Plan/update-plan?id=${encodeURIComponent(planId)}`;
-      const body = { planId, ...plan } as any;
+      // Update plan - ID goes as query parameter, plan data in body
+      const url = `${BASE_URL}/api/plans?id=${planId}`;
+      const body = plan;
+      
+      console.log('🔄 Update Plan Request:', { url, method: 'PUT', planId, body });
       const headers = getAuthHeaders();
       headers['Accept'] = 'application/json';
       const response = await fetch(url, {
@@ -201,7 +222,7 @@ export const planApi = {
   // Delete plan
   deletePlan: async (planId: number): Promise<void> => {
     try {
-      const response = await fetch(`${BASE_URL}/api/Plan/${planId}`, {
+      const response = await fetch(`${BASE_URL}/api/plans/${planId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
@@ -218,7 +239,7 @@ export const planApi = {
   // Toggle plan status
   togglePlanStatus: async (planId: number): Promise<Plan> => {
     try {
-      const response = await fetch(`${BASE_URL}/api/Plan/${planId}/toggle-status`, {
+      const response = await fetch(`${BASE_URL}/api/plans/${planId}/deactivate`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
       });
@@ -239,8 +260,8 @@ export const planApi = {
   // Unactive plan
   unactivePlan: async (planId: number): Promise<void> => {
     try {
-      const response = await fetch(`${BASE_URL}/api/Plan/unactive/${planId}`, {
-        method: 'PUT',
+      const response = await fetch(`${BASE_URL}/api/plans/${planId}/deactivate`, {
+        method: 'PATCH',
         headers: getAuthHeaders(),
       });
 

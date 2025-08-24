@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -11,6 +11,7 @@ import {
   LogOut,
   User
 } from 'lucide-react';
+import LogoutModal from './LogoutModal';
 
 
 interface SidebarProps {
@@ -30,6 +31,7 @@ const menuItems = [
 
 const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onLogout, user }) => {
   const navigate = useNavigate();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   return (
     <motion.div 
@@ -86,23 +88,29 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onLogout, user }) => {
         {/* Footer with Logout */}
         <div className="border-t border-[#5A3E2D] mt-auto pb-2">
           <button
-            onClick={() => {
-              if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
-                onLogout();
-              }
-            }}
-            className="w-full flex items-center gap-2 px-6 py-3 text-white font-semibold text-base rounded-lg transition-all duration-200 hover:bg-[#5A3E2D] focus:outline-none"
-            style={{ background: 'transparent', justifyContent: 'flex-start' }}
+            onClick={() => setShowLogoutModal(true)}
+            className="w-full flex items-center justify-start gap-2 px-6 py-3 text-white font-semibold text-base rounded-lg transition-all duration-200 hover:bg-[#5A3E2D] focus:outline-none bg-transparent"
             title="Đăng xuất"
           >
             <LogOut className="w-5 h-5" />
-            Đăng xuất
+            {!isCollapsed && 'Đăng xuất'}
           </button>
           <div className="text-center text-sm text-white/60 mt-2">
             © 2025 CafeDaily
           </div>
         </div>
       </div>
+      
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={() => {
+          setShowLogoutModal(false);
+          onLogout();
+        }}
+        userName={user?.username}
+      />
     </motion.div>
   );
 };

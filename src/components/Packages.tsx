@@ -2,6 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { planApi, Plan, CreatePlanRequest, UpdatePlanRequest, Product } from '../utils/apiPlan';
+import { 
+  useFormValidation, 
+  planValidationSchema,
+  getFieldError,
+  hasFieldError 
+} from '../utils/validation';
+import { toast } from 'react-toastify';
+import DeleteModal from './DeleteModal';
 
 interface Package {
   id: string;
@@ -27,10 +35,13 @@ const Packages: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [deactivatePackage, setDeactivatePackage] = useState<Package | null>(null);
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(6); // 6 items per page for 2x3 grid
+  
+  // Note: Form validation is handled in PackageModal component
 
   // Helper function to show success message
   const showSuccessMessage = (message: string) => {
@@ -163,17 +174,21 @@ const Packages: React.FC = () => {
     }
   };
 
-  const handleUnactivePlan = async (packageId: string) => {
-    if (confirm('Bạn có chắc chắn muốn vô hiệu hóa gói dịch vụ này?')) {
-      try {
-        await planApi.unactivePlan(parseInt(packageId));
-        showSuccessMessage('Vô hiệu hóa gói dịch vụ thành công!');
-        // Reload data from server to get latest status
-        await loadPackages(false);
-      } catch (err) {
-        console.error('Error unactivating plan:', err);
-        alert('Có lỗi xảy ra khi vô hiệu hóa gói dịch vụ');
-      }
+  const handleUnactivePlan = (pkg: Package) => {
+    setDeactivatePackage(pkg);
+  };
+
+  const confirmDeactivate = async () => {
+    if (!deactivatePackage) return;
+    try {
+      await planApi.unactivePlan(parseInt(deactivatePackage.id));
+      showSuccessMessage('Vô hiệu hóa gói dịch vụ thành công!');
+      setDeactivatePackage(null);
+      // Reload data from server to get latest status
+      await loadPackages(false);
+    } catch (err) {
+      console.error('Error unactivating plan:', err);
+      toast.error('Có lỗi xảy ra khi vô hiệu hóa gói dịch vụ');
     }
   };
 
@@ -336,7 +351,7 @@ const Packages: React.FC = () => {
                       </button>
                       {pkg.active && (
                         <button
-                          onClick={() => handleUnactivePlan(pkg.id)}
+                          onClick={() => handleUnactivePlan(pkg)}
                           className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors duration-200"
                           title="Vô hiệu hóa"
                         >
@@ -424,6 +439,16 @@ const Packages: React.FC = () => {
           onSave={handleSave}
         />
       )}
+
+      {/* Deactivate Confirmation Modal */}
+      <DeleteModal
+        isOpen={!!deactivatePackage}
+        onClose={() => setDeactivatePackage(null)}
+        onConfirm={confirmDeactivate}
+        title="Vô hiệu hóa gói dịch vụ"
+        itemName={deactivatePackage?.name}
+        loading={loading}
+      />
     </div>
   );
 };
@@ -449,6 +474,25 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
     maxPerVisit: pkg?.maxPerVisit || 1,
     active: pkg?.active !== undefined ? pkg?.active : true
   });
+  
+  // Form validation for modal
+  const {
+    errors: modalValidationErrors,
+    validateFieldRealtime: modalValidateFieldRealtime,
+    validateAllFields: modalValidateAllFields,
+    clearErrors: modalClearErrors,
+  } = useFormValidation(planValidationSchema);
+
+  // Handle input changes with validation
+  const handleInputChange = (field: string, value: any) => {
+    setFormData({ ...formData, [field]: value });
+    modalValidateFieldRealtime(field, value);
+  };
+
+  // Clear errors when modal opens
+  useEffect(() => {
+    modalClearErrors();
+  }, [modalClearErrors]);
 
   // When editing, auto-select the product that belongs to the plan
   useEffect(() => {
@@ -479,10 +523,21 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
     setFormData({ ...formData, price: numberValue });
     // Update the display value with formatting
     setPriceDisplay(numberValue ? numberValue.toLocaleString('vi-VN') : '');
+    // Validate price
+    modalValidateFieldRealtime('price', numberValue);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate form before submission
+    const validationResult = modalValidateAllFields(formData);
+    
+    if (!validationResult.isValid) {
+      toast.error('Vui lòng sửa các lỗi trong form trước khi lưu');
+      return;
+    }
+    
     onSave(formData);
   };
 
@@ -515,12 +570,15 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
               id="package-name"
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+              onChange={(e) => handleInputChange('name', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none ${hasFieldError(modalValidationErrors, 'name') ? 'border-red-500' : 'border-gray-300'}`}
               required
               placeholder="Nhập tên gói"
               title="Tên gói"
             />
+            {getFieldError(modalValidationErrors, 'name') && (
+              <div className="text-red-500 text-xs mt-1">{getFieldError(modalValidationErrors, 'name')}</div>
+            )}
           </div>
 
           <div>
@@ -531,13 +589,15 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
               onChange={(e) => {
                 const selectedProductId = Number(e.target.value);
                 const selectedProduct = products.find(p => p.productId === selectedProductId);
-                setFormData({ 
+                const newFormData = { 
                   ...formData, 
                   productId: selectedProductId,
                   productName: selectedProduct?.name || ''
-                });
+                };
+                setFormData(newFormData);
+                handleInputChange('productId', selectedProductId);
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none ${hasFieldError(modalValidationErrors, 'productId') ? 'border-red-500' : 'border-gray-300'}`}
               required
               title="Chọn sản phẩm"
             >
@@ -548,6 +608,9 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
                 </option>
               ))}
             </select>
+            {getFieldError(modalValidationErrors, 'productId') && (
+              <div className="text-red-500 text-xs mt-1">{getFieldError(modalValidationErrors, 'productId')}</div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -558,11 +621,14 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
                 type="text"
                 value={priceDisplay}
                 onChange={handlePriceChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none ${hasFieldError(modalValidationErrors, 'price') ? 'border-red-500' : 'border-gray-300'}`}
                 placeholder="0"
                 required
                 title="Giá"
               />
+              {getFieldError(modalValidationErrors, 'price') && (
+                <div className="text-red-500 text-xs mt-1">{getFieldError(modalValidationErrors, 'price')}</div>
+              )}
             </div>
 
             <div>
@@ -571,12 +637,15 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
                 id="duration-days"
                 type="number"
                 value={formData.durationDays}
-                onChange={(e) => setFormData({ ...formData, durationDays: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+                              onChange={(e) => handleInputChange('durationDays', Number(e.target.value))}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none ${hasFieldError(modalValidationErrors, 'durationDays') ? 'border-red-500' : 'border-gray-300'}`}
                 required
                 placeholder="Số ngày"
                 title="Thời hạn (ngày)"
               />
+              {getFieldError(modalValidationErrors, 'durationDays') && (
+                <div className="text-red-500 text-xs mt-1">{getFieldError(modalValidationErrors, 'durationDays')}</div>
+              )}
             </div>
           </div>
 
@@ -587,12 +656,15 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
                 id="daily-quota"
                 type="number"
                 value={formData.dailyQuota}
-                onChange={(e) => setFormData({ ...formData, dailyQuota: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+                              onChange={(e) => handleInputChange('dailyQuota', Number(e.target.value))}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none ${hasFieldError(modalValidationErrors, 'dailyQuota') ? 'border-red-500' : 'border-gray-300'}`}
                 required
                 placeholder="Số ly/ngày"
                 title="Hạn mức hàng ngày"
               />
+              {getFieldError(modalValidationErrors, 'dailyQuota') && (
+                <div className="text-red-500 text-xs mt-1">{getFieldError(modalValidationErrors, 'dailyQuota')}</div>
+              )}
             </div>
 
             <div>
@@ -601,12 +673,15 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
                 id="max-per-visit"
                 type="number"
                 value={formData.maxPerVisit}
-                onChange={(e) => setFormData({ ...formData, maxPerVisit: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+                              onChange={(e) => handleInputChange('maxPerVisit', Number(e.target.value))}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none ${hasFieldError(modalValidationErrors, 'maxPerVisit') ? 'border-red-500' : 'border-gray-300'}`}
                 required
                 placeholder="Số ly/lần"
                 title="Tối đa mỗi lần"
               />
+              {getFieldError(modalValidationErrors, 'maxPerVisit') && (
+                <div className="text-red-500 text-xs mt-1">{getFieldError(modalValidationErrors, 'maxPerVisit')}</div>
+              )}
             </div>
           </div>
 
@@ -615,13 +690,16 @@ const PackageModal: React.FC<PackageModalProps> = ({ package: pkg, products, mod
             <textarea
               id="description"
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
+              onChange={(e) => handleInputChange('description', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none ${hasFieldError(modalValidationErrors, 'description') ? 'border-red-500' : 'border-gray-300'}`}
               rows={3}
               required
               placeholder="Mô tả gói"
               title="Mô tả"
             />
+            {getFieldError(modalValidationErrors, 'description') && (
+              <div className="text-red-500 text-xs mt-1">{getFieldError(modalValidationErrors, 'description')}</div>
+            )}
           </div>
 
           {/* Bỏ chỉnh sửa ảnh theo yêu cầu */}
