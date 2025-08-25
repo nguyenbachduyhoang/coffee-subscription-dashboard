@@ -60,7 +60,7 @@ function normalizeToken(rawToken: string): string {
 }
 
 export async function login(username: string, password: string): Promise<string> {
-  const res = await axiosInstance.post('/api/Staff/login', { email: username, password }, { responseType: 'text' });
+  const res = await axiosInstance.post('/api/staffs/login', { email: username, password }, { responseType: 'text' });
   let tokenCandidate: any = res.data;
   if (typeof tokenCandidate === 'string') {
     tokenCandidate = normalizeToken(tokenCandidate);
@@ -104,4 +104,15 @@ export async function updateProduct(formData: FormData) {
 export async function deleteProduct(id: string | number) {
   const numericId = Number(String(id).trim());
   return axiosInstance.delete(`/api/Product/delete-product/${Number.isFinite(numericId) ? numericId : id}`);
+}
+
+// Barista/Staff APIs
+export async function getAllBaristas(): Promise<any[]> {
+  const res = await axiosInstance.get('/api/staffs/baristas');
+  return res.data || [];
+}
+
+export async function getBaristaById(id: string | number): Promise<any> {
+  const res = await axiosInstance.get(`/api/staffs/${id}`);
+  return res.data;
 }
