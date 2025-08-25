@@ -93,49 +93,6 @@ const Orders: React.FC = () => {
               </select>
             </div>
 
-            <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Tìm kiếm mã đơn hoặc tên khách hàng..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
-              />
-            </div>
-
-            <div>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
-                title="Lọc theo trạng thái"
-              >
-                <option value="all">Tất cả trạng thái</option>
-                <option value="pending">Đang xử lý</option>
-                <option value="completed">Hoàn thành</option>
-                <option value="cancelled">Đã hủy</option>
-              </select>
-            </div>
-
-            <div>
-              <select
-                value={paymentFilter}
-                onChange={(e) => setPaymentFilter(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#FFD580] focus:border-transparent outline-none"
-                title="Lọc theo phương thức thanh toán"
-              >
-                <option value="all">Tất cả phương thức</option>
-                <option value="vnpay">VNPay</option>
-                <option value="card">Thẻ tín dụng</option>
-                <option value="other">Khác</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
             <div>
               <select
                 value={paymentFilter}

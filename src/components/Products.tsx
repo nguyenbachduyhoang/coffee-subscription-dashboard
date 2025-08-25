@@ -155,6 +155,8 @@ const Products: React.FC = () => {
 
   const handleAdd = () => {
     setForm(defaultForm);
+    setForm(defaultForm);
+    setForm(defaultForm);
     setPriceInput('');
     setImageFile(null);
     setIsEdit(false);
