@@ -1,6 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 import { 
-  ApiResponse, 
   User, 
   UserResponse, 
   Product, 
@@ -9,6 +8,8 @@ import {
   CategoryResponse, 
   Order, 
   OrderResponse,
+  Barista,
+  BaristaResponse,
   ApiError
 } from '../types/api';
 import { authStorage } from '../utils/storage';
@@ -42,7 +43,7 @@ class ApiService {
     this.axiosInstance.interceptors.request.use(
       (config) => {
         const auth = authStorage.getAuth();
-        if (auth?.token) {
+        if (auth && typeof auth === 'object' && 'token' in auth && auth.token) {
           config.headers.Authorization = `Bearer ${auth.token}`;
         }
         return config;
@@ -70,13 +71,14 @@ class ApiService {
   private handleApiError(error: AxiosError): ApiError {
     if (error.response) {
       // Server responded with error status
-      const message = error.response.data?.message || 
-                     error.response.data?.error || 
+      const data = error.response.data as any;
+      const message = data?.message || 
+                     data?.error || 
                      `HTTP ${error.response.status}: ${error.response.statusText}`;
       return {
         message,
         status: error.response.status,
-        code: error.response.data?.code
+        code: data?.code
       };
     } else if (error.request) {
       // Request made but no response received
@@ -117,7 +119,7 @@ class ApiService {
   // Auth API
   async login(email: string, password: string): Promise<string> {
     try {
-      const response = await this.post<any>('/api/staff/login', { email, password });
+      const response = await this.post<any>('/api/staffs/login', { email, password });
       
       // Handle different response formats
       if (typeof response === 'string') {
@@ -224,6 +226,17 @@ class ApiService {
     return this.mapOrders(response);
   }
 
+  // Barista/Staff API
+  async getBaristas(): Promise<Barista[]> {
+    const response = await this.get<BaristaResponse[]>('/api/staffs/baristas');
+    return this.mapBaristas(response);
+  }
+
+  async getBaristaById(id: string | number): Promise<Barista> {
+    const response = await this.get<BaristaResponse>(`/api/staffs/${id}`);
+    return this.mapBarista(response);
+  }
+
   // Data mapping methods
   private mapUser(user: UserResponse): User {
     return {
@@ -288,6 +301,22 @@ class ApiService {
       return category.id;
     }
     return category || '';
+  }
+
+  private mapBarista(barista: BaristaResponse): Barista {
+    return {
+      id: barista.id || barista.staffId || '',
+      name: barista.name || barista.fullName || '',
+      email: barista.email || '',
+      phone: barista.phone || '',
+      role: barista.role || 'barista',
+      status: (barista.status === 'active' || barista.isActive) ? 'active' : 'inactive',
+      createdAt: barista.createdAt || new Date().toISOString().split('T')[0]
+    };
+  }
+
+  private mapBaristas(baristas: BaristaResponse[]): Barista[] {
+    return baristas.map(barista => this.mapBarista(barista));
   }
 }
 

@@ -129,6 +129,30 @@ export interface AuthData {
   expiresAt: number;
 }
 
+// Barista/Staff Types
+export interface BaristaResponse {
+  id?: string;
+  staffId?: string;
+  name?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  status?: string;
+  isActive?: boolean;
+  createdAt?: string;
+}
+
+export interface Barista {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
 // Error Types
 export interface ApiError {
   message: string;
