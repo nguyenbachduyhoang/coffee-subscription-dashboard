@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Edit, Trash2, Eye, Plus } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { useApi, useMutation } from '../hooks/useApi';
 import { User } from '../types/api';
@@ -13,7 +13,7 @@ const Users: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add'>('view');
+  const [modalMode] = useState<'view' | 'edit' | 'add'>('view');
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
 
   // API hooks
@@ -46,12 +46,6 @@ const Users: React.FC = () => {
     );
   }, [users, searchTerm]);
 
-  const openModal = useCallback((user: User | null, mode: 'view' | 'edit' | 'add') => {
-    setSelectedUser(user);
-    setModalMode(mode);
-    setIsModalOpen(true);
-  }, []);
-
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedUser(null);
@@ -74,10 +68,6 @@ const Users: React.FC = () => {
       console.error('Error saving user:', err);
     }
   }, [modalMode, selectedUser, createUserMutation, updateUserMutation, refetch, closeModal]);
-
-  const handleDelete = useCallback((user: User) => {
-    setDeleteUser(user);
-  }, []);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteUser) return;
@@ -104,13 +94,6 @@ const Users: React.FC = () => {
       >
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
           <h2 className="text-2xl font-bold text-[#6F4E37] mb-4 md:mb-0">Quản lý người dùng</h2>
-          <button
-            onClick={() => openModal(null, 'add')}
-            className="bg-[#6F4E37] text-white px-4 py-2 rounded-lg hover:bg-[#5A3E2D] transition-colors duration-200 flex items-center"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Thêm người dùng
-          </button>
         </div>
 
         {/* Search */}
@@ -153,7 +136,6 @@ const Users: React.FC = () => {
                   <th className="px-6 py-4 text-left font-semibold">SĐT</th>
                   <th className="px-6 py-4 text-left font-semibold">Ngày đăng ký</th>
                   <th className="px-6 py-4 text-left font-semibold">Trạng thái</th>
-                  <th className="px-6 py-4 text-left font-semibold">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -178,31 +160,6 @@ const Users: React.FC = () => {
                       }`}>
                         {user.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
                       </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => openModal(user, 'view')}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                          title="Xem chi tiết"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => openModal(user, 'edit')}
-                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
-                          title="Chỉnh sửa"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(user)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                          title="Xóa"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
                     </td>
                   </motion.tr>
                 ))}
